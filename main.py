@@ -44,12 +44,12 @@ def get_page(word: str, url: str = "https://dictionary.cambridge.org/dictionary/
     return page, page_title
 
 # Добавление карточек в колоду
-def add_note_to_anki(page_title: str, page: str, deck="Deck", model="Простая"):
+def add_note_to_anki(page_title: str, page: str, deck="English", model="Простая"):
     # Удаление лишних слов на страницах не производных от нужного слова
-    spare_words = page.select("div.pr.runon.drunon")
-    if spare_words is not None:
-        for spare_word in spare_words:
-            spare_word.decompose()
+    # spare_words = page.select("div.pr.runon.drunon")
+    # if spare_words is not None:
+    #     for spare_word in spare_words:
+    #         spare_word.decompose()
     # Выборка главных ячеек
     entries = page.select("div.entry")
     for entry in entries:
@@ -72,9 +72,12 @@ def add_note_to_anki(page_title: str, page: str, deck="Deck", model="Прост�
                                 font-size: 14px;
                                 padding: 8px;
                             }
-                            p {
+                            p, span {
                                 padding: 0px;
                                 margin: 0px 0px 8px;
+                            }
+                            .runon-part-of-speech {
+                                font-size: 14px;
                             }
                             .sense {
                                 font-weight: 700;
@@ -82,6 +85,17 @@ def add_note_to_anki(page_title: str, page: str, deck="Deck", model="Прост�
                             }
                             .definition {
                                 font-size: 16px;
+                                font-weight: 700;
+                            }
+                            .runon-block {
+                                margin-bottom: 10px;
+                            }
+                            .runon-part-of-speech {
+                                font-style: italic;
+                                font-weight:700;
+                            }
+                            .runon-word {
+                                font-size: 20px;
                                 font-weight: 700;
                             }
                             .translation {
@@ -108,10 +122,11 @@ def add_note_to_anki(page_title: str, page: str, deck="Deck", model="Прост�
                         </style>
                         """)
             # Часть речи
-            part_of_speech = subentry.select_one("span.pos.dpos").get_text(strip=True, separator=" ")
+            #part_of_speech = subentry.select_one("span.pos.dpos").get_text(strip=True, separator=" ")
+            part_of_speech = ", ".join(span.get_text(strip=True) for span in subentry.select("span.pos.dpos")) or ""
             #print(f"Часть речи: {part_of_speech}")
             # Разные значения слова
-            meanings = subentry.select("div.pr.dsense")
+            meanings = subentry.select("div.pr.dsense, div.pr.runon")
             for meaning in meanings:
                 # Проверяем есть ли у значения смысл (фиолетовая надпись или надпись, перед которой стоит стрелка в синих блоках)
                 raw_sense = meaning.select_one("h3.dsense_h")
@@ -128,6 +143,15 @@ def add_note_to_anki(page_title: str, page: str, deck="Deck", model="Прост�
                 else:
                     is_blue_background = False
                     not_sense = True if raw_sense is None else False
+
+                if "runon" in meaning.get("class", []):
+                    is_blue_background = True
+                    not_sense = True
+                    runon_word = meaning.select_one("span.w.dw").get_text(strip=True, separator=" ")
+                    runon_part_of_speech = meaning.select_one("span.pos.dpos").get_text(strip=True, separator=" ")
+                else:
+                    runon_word = None
+                    runon_part_of_speech = None
 
                 sense = re.sub(
                             r"\(\s*(.*?)\s*\)", r"(\1)",
@@ -156,6 +180,7 @@ def add_note_to_anki(page_title: str, page: str, deck="Deck", model="Прост�
                 front = page_title + f' <i style="font-size: 14px;">{part_of_speech}</i>'
                 back += f"""
                         <div class="main {f'blue-main' if is_blue_background else ''} {f'no-sense' if not_sense else ''}">
+                            {f'<div class="runon-block"><span class="runon-word">{runon_word}</span> <span class="runon-part-of-speech">{runon_part_of_speech}</span></div>' if runon_word is not None else ''}
                             {f'<p class="sense {f'blue-sense' if is_blue_background else ''}">{sense}</p>' if sense is not None else ''}
                             {f'<p class="definition">{definition}</p>' if definition is not None else ''}
                             {f'<p class="translation">{translation}</p>' if translation is not None else ''}
